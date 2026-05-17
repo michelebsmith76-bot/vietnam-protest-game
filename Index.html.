@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Race for Change: Chaos Edition</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Special+Elite&display=swap" rel="stylesheet">
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+  <style>
+    /* Global Reset and Canvas Setup */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #131313;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
+    /* Responsive options layout for smaller devices/Chromebooks */
+    @media (max-width: 550px) {
+      .responsive-options-grid {
+        grid-template-columns: 1fr !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    const ALL_QUESTIONS = [
+      { category: "CAUSES", text: "Many young people opposed the Vietnam War draft because it was unfair. Who was MORE likely to be forced to fight?", options: ["Rich Americans with university deferments", "Poor people and Black Americans", "Older men over 35", "Volunteers who chose to serve"], correct: 1 },
+      { category: "CAUSES", text: "Shocking TV images from Vietnam turned youth against the war. Which event showed US soldiers killing innocent Vietnamese civilians?", options: ["The Kent State Shooting", "The Stonewall Riots", "The My Lai Massacre", "The Days of Rage"], correct: 2 },
+      { category: "CAUSES", text: "In 1970, students at Kent State University protested the war. What did the National Guard do?", options: ["Arrested the protest leaders", "Shot and killed four students", "Closed the university", "Joined the protesters"], correct: 1 },
+      { category: "CAUSES", text: "The FBI ran a secret programme spying on civil rights and peace activists. What was it called?", options: ["Operation Freedom", "COINTELPRO", "Project Oversight", "The Pentagon Files"], correct: 1 },
+      { category: "CAUSES", text: "Why did young people feel misunderstood by older generations in the 1960s?", options: ["They earned less money than their parents", "Older people called them lazy, rude, or 'un-American'", "They were excluded from voting", "Universities refused to admit them"], correct: 1 },
+      { category: "AIMS", text: "Young peace protesters used a famous slogan. What did it say?", options: ["'All Power to the People'", "'We Shall Overcome'", "'Make Love, Not War'", "'Hell No, We Won't Go'"], correct: 2 },
+      { category: "AIMS", text: "The Students for a Democratic Society (SDS) campaigned for what?", options: ["Military spending and national defence", "Greater involvement in political decision-making", "Stricter campus rules", "Limits on immigration"], correct: 1 },
+      { category: "AIMS", text: "The Berkeley Free Speech Movement (1964) had one key demand. What was it?", options: ["End racial segregation in California", "Protect the right to political expression on campus", "Stop the military draft", "Legalise music festivals"], correct: 1 },
+      { category: "AIMS", text: "Young activists fought for gender equality, equal pay, and reproductive rights as part of which movement?", options: ["The Gay Liberation Front", "The Environmental Movement", "The Women's Liberation Movement", "The Black Power Movement"], correct: 2 },
+      { category: "AIMS", text: "Which environmental event did the counterculture movement help create in 1970?", options: ["The Clean Air Act", "The First Earth Day", "The Woodstock Festival", "The Nuclear Freeze Campaign"], correct: 1 },
+      { category: "METHODS", text: "What did protesters DO during a sit-in protest like the 1960 Greensboro sit-ins?", options: ["March through city streets with signs", "Occupy segregated places and refuse to leave", "Set fire to government buildings", "Block roads to stop traffic"], correct: 1 },
+      { category: "METHODS", text: "'Teach-ins' started at the University of Michigan in 1965. What happened at a teach-in?", options: ["Students boycotted all classes for a week", "Informal lectures and debates about the Vietnam War were held", "Professors refused to grade student work", "Students occupied the president's office"], correct: 1 },
+      { category: "METHODS", text: "In 1968, radical protesters occupied Columbia University. What were they protesting against?", options: ["The assassination of Martin Luther King Jr.", "University expansion into Harlem and defence contracts", "The Kent State shootings", "Nixon's re-election"], correct: 1 },
+      { category: "ACHIEVEMENTS", text: "Young activists marched from Selma to Montgomery to fight unfair voting rules. This helped pass which law in 1965?", options: ["The Civil Rights Act", "The Equal Rights Amendment", "The Voting Rights Act", "The Fair Housing Act"], correct: 2 },
+      { category: "ACHIEVEMENTS", text: "Mass campus protests helped end the military draft. In what year did the draft finally end?", options: ["1970", "1971", "1973", "1975"], correct: 2 },
+    ];
+
+    const CAT_COLORS = { CAUSES: "#e05c3a", AIMS: "#d4a017", METHODS: "#5a9e6f", ACHIEVEMENTS: "#4a90d9" };
+    const LETTERS = ["A","B","C","D"];
+    const GAME_KEY = "protest_chaos_v1";
+    const POLL_MS = 1800;
+    const TIME_PER_Q = 20;
+
+    function shuffle(arr) {
+      const a = [...arr];
+      for (let i = a.length-1; i>0; i--) { const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+      return a;
+    }
+
+    const POWERUPS = {
+      pickpocket:   { id:"pickpocket",   icon:"🤜", label:"Pickpocket",       desc:"Steal 50pts from a classmate", color:"#e05c3a", needsTarget:true  },
+      block:        { id:"block",        icon:"🛑", label:"Protest Block",    desc:"Freeze a player for 10s (costs 75pts)", color:"#c0392b", needsTarget:true  },
+      snitch:       { id:"snitch",       icon:"🕵️", label:"Snitch to FBI",    desc:"Wipe a player's streak bonus", color:"#8e44ad", needsTarget:true  },
+      solidarity:   { id:"solidarity",   icon:"✊", label:"Solidarity",       desc:"Gift 30pts to a friend (free!)", color:"#5a9e6f", needsTarget:true  },
+      teachin:      { id:"teachin",      icon:"📢", label:"Teach-In",        desc:"Send a hint to a friend", color:"#4a90d9", needsTarget:true, needsHint:true },
+      march:        { id:"march",        icon:"🚶", label:"March Together",   desc:"Link with a friend for +25 bonus each", color:"#27ae60", needsTarget:true  },
+      nixon:        { id:"nixon",        icon:"🎭", label:"Nixon's Dirty Tricks", desc:"Scramble the leaderboard for 15s!", color:"#7f8c8d", needsTarget:false },
+      dodger:       { id:"dodger",       icon:"🏃", label:"Draft Dodger",    desc:"Skip this question, no penalty", color:"#f39c12", needsTarget:false },
+    };
+
+    // Robust State Engine utilizing standard LocalStorage for fast peer-to-peer sharing
+    const StorageEngine = {
+      get: async (key) => {
+        try {
+          const val = localStorage.getItem(key);
+          return val ? JSON.parse(val) : {};
+        } catch(e) { return {}; }
+      },
+      set: async (key, valObject) => {
+        try {
+          localStorage.setItem(key, JSON.stringify(valObject));
+        } catch(e) {}
+      }
+    };
+
+    function App() {
+      const [screen, setScreen] = useState("join");
+      const [playerName, setPlayerName] = useState("");
+      const [nameError, setNameError] = useState("");
+      const [questions] = useState(() => shuffle(ALL_QUESTIONS));
+
+      // Game engine variables
+      const [qIndex, setQIndex] = useState(0);
+      const [shuffledOpts, setShuffledOpts] = useState([]);
+      const [selected, setSelected] = useState(null);
+      const [answered, setAnswered] = useState(false);
+      const [timeLeft, setTimeLeft] = useState(TIME_PER_Q);
+      const [score, setScore] = useState(0);
+      const [streak, setStreak] = useState(0);
+      const [bestStreak, setBestStreak] = useState(0);
+      const [correctCount, setCorrectCount] = useState(0);
+      const [feedback, setFeedback] = useState(null);
+      const [phase, setPhase] = useState("question");
+
+      // Power-ups and modifiers
+      const [myPowerups, setMyPowerups] = useState([]);
+      const [activePowerup, setActivePowerup] = useState(null);
+      const [hintToSend, setHintToSend] = useState(null);
+      const [frozen, setFrozen] = useState(false);
+      const [frozenMsg, setFrozenMsg] = useState("");
+      const [incomingMsg, setIncomingMsg] = useState(null);
+      const [leaderboard, setLeaderboard] = useState([]);
+      const [scrambled, setScrambled] = useState(false);
+      const [marching, setMarching] = useState(null);
+      const [marchPending, setMarchPending] = useState(false);
+      const [nixonActive, setNixonActive] = useState(false);
+      const [lbError, setLbError] = useState(false);
+      const [toast, setToast] = useState(null);
+
+      const timerRef = useRef(null);
+      const pollRef = useRef(null);
+      const scoreRef = useRef(0);
+      const nameRef = useRef("");
+      const answeredRef = useRef(false);
+      const frozenRef = useRef(false);
+      const marchingRef = useRef(null);
+      const qIndexRef = useRef(0);
+
+      useEffect(() => { scoreRef.current = score; }, [score]);
+      useEffect(() => { nameRef.current = playerName; }, [playerName]);
+      useEffect(() => { answeredRef.current = answered; }, [answered]);
+      useEffect(() => { frozenRef.current = frozen; }, [frozen]);
+      useEffect(() => { marchingRef.current = marching; }, [marching]);
+      useEffect(() => { qIndexRef.current = qIndex; }, [qIndex]);
+
+      const showToast = (msg, color="#d4a017") => {
+        setToast({msg, color});
+        setTimeout(() => setToast(null), 2800);
+      };
+
+      const readState = useCallback(async () => {
+        return await StorageEngine.get(GAME_KEY);
+      }, []);
+
+      const writeState = useCallback(async (updater) => {
+        const cur = await readState();
+        const next = updater(cur);
+        await StorageEngine.set(GAME_KEY, next);
+      }, [readState]);
+
+      const poll = useCallback(async () => {
+        try {
+          const state = await readState();
+          const lb = Object.entries(state)
+            .filter(([k]) => k !== "__events__")
+            .map(([name, d]) => ({ name, score: d.score||0, done: d.done||false, frozen: d.frozen||false, marching: d.marching||null }))
+            .sort((a,b) => b.score - a.score);
+          setLeaderboard(lb);
+          setLbError(false);
+
+          const events = state.__events__ || [];
+          const mine = events.filter(e => e.to === nameRef.current && !e.seen);
+          if (mine.length > 0) {
+            for (const ev of mine) {
+              processEvent(ev);
+            }
+            await writeState(cur => {
+              const evs = cur.__events__ || [];
+              return { ...cur, __events__: evs.map(e => e.to === nameRef.current ? {...e, seen:true} : e) };
+            });
+          }
+
+          const me = state[nameRef.current];
+          if (me && me.frozen && !frozenRef.current) {
+            applyFreeze("A classmate blocked you! ❄️");
+          }
+
+          if (marchingRef.current && !answeredRef.current) {
+            const partner = state[marchingRef.current];
+            if (partner && partner.marchAnswered === qIndexRef.current) {
+              showToast(`🚶 ${marchingRef.current} just answered — march bonus ready!`, "#27ae60");
+            }
+          }
+        } catch(e) { setLbError(true); }
+      }, [readState, writeState]);
+
+      const processEvent = (ev) => {
+        if (ev.type === "pickpocket") {
+          const stolen = Math.min(ev.amount, scoreRef.current);
+          setScore(s => Math.max(0, s - stolen));
+          scoreRef.current = Math.max(0, scoreRef.current - stolen);
+          showToast(`🤜 ${ev.from} pickpocketed you! -${stolen}pts`, "#e05c3a");
+          saveMyScore(scoreRef.current);
+        }
+        if (ev.type === "block") {
+          applyFreeze(`🛑 ${ev.from} blocked you! Frozen for 10s`);
+        }
+        if (ev.type === "snitch") {
+          setStreak(0);
+          showToast(`🕵️ ${ev.from} snitched to the FBI! Streak wiped.`, "#8e44ad");
+        }
+        if (ev.type === "solidarity") {
+          setScore(s => s + ev.amount);
+          scoreRef.current += ev.amount;
+          showToast(`✊ ${ev.from} gifted you ${ev.amount}pts! Solidarity!`, "#5a9e6f");
+          saveMyScore(scoreRef.current);
+        }
+        if (ev.type === "hint") {
+          setIncomingMsg({ type:"hint", from:ev.from, value:ev.hint });
+          showToast(`📢 ${ev.from} sent you a hint: Option ${LETTERS[ev.hint]}!`, "#4a90d9");
+        }
+        if (ev.type === "march") {
+          setMarchPending(true);
+          setIncomingMsg({ type:"march", from:ev.from });
+          showToast(`🚶 ${ev.from} wants to march with you!`, "#27ae60");
+        }
+        if (ev.type === "marchAccepted") {
+          setMarching(ev.from);
+          showToast(`🚶 Marching with ${ev.from}! +25 bonus on next co-correct`, "#27ae60");
+        }
+        if (ev.type === "nixon") {
+          setScrambled(true);
+          setNixonActive(true);
+          showToast("🎭 Nixon's Dirty Tricks! Leaderboard scrambled for 15s!", "#7f8c8d");
+          setTimeout(() => { setScrambled(false); setNixonActive(false); }, 15000);
+        }
+      };
+
+      const applyFreeze = (msg) => {
+        setFrozen(true);
+        frozenRef.current = true;
+        setFrozenMsg(msg);
+        showToast(msg, "#c0392b");
+        setTimeout(() => {
+          setFrozen(false);
+          frozenRef.current = false;
+          setFrozenMsg("");
+        }, 10000);
+      };
+
+      const saveMyScore = useCallback(async (pts, done=false, extra={}) => {
+        await writeState(cur => ({
+          ...cur,
+          [nameRef.current]: { score: pts, done, updatedAt: Date.now(), ...extra }
+        }));
+      }, [writeState]);
+
+      const sendEvent = useCallback(async (to, eventObj) => {
+        await writeState(cur => {
+          const evs = cur.__events__ || [];
+          return { ...cur, __events__: [...evs.filter(e => Date.now() - (e.ts||0) < 60000), { to, from:nameRef.current, ts:Date.now(), seen:false, ...eventObj }] };
+        });
+      }, [writeState]);
+
+      const handleJoin = async () => {
+        const n = playerName.trim();
+        if (!n || n.length < 2) { setNameError("Please enter a name (at least 2 characters)."); return; }
+        setNameError("");
+        nameRef.current = n;
+        await saveMyScore(0, false);
+        setScreen("game");
+        startQuestion(0);
+        poll();
+        pollRef.current = setInterval(poll, POLL_MS);
+        setMyPowerups(["pickpocket","block","snitch","solidarity","teachin","march","nixon","dodger"]);
+      };
+
+      const startQuestion = (idx) => {
+        const q = questions[idx];
+        setShuffledOpts(shuffle(q.options.map((o,i) => ({ text:o, isCorrect:i===q.correct, origIdx:i }))));
+        setSelected(null);
+        setAnswered(false);
+        answeredRef.current = false;
+        setFeedback(null);
+        setPhase("question");
+        setTimeLeft(TIME_PER_Q);
+        setActivePowerup(null);
+        setHintToSend(null);
+        setIncomingMsg(null);
+        setMarchPending(false);
+      };
+
+      useEffect(() => {
+        if (screen !== "game" || phase !== "question") return;
+        clearInterval(timerRef.current);
+        timerRef.current = setInterval(() => {
+          if (frozenRef.current) return;
+          setTimeLeft(t => {
+            if (t <= 0.1) { clearInterval(timerRef.current); if (!answeredRef.current) handleTimeout(); return 0; }
+            return +(t-0.1).toFixed(1);
+          });
+        }, 100);
+        return () => clearInterval(timerRef.current);
+      }, [qIndex, screen, phase]);
+
+      const handleTimeout = () => {
+        if (answeredRef.current) return;
+        setAnswered(true); answeredRef.current = true;
+        setPhase("reveal");
+        setStreak(0);
+        setFeedback({ correct:false, pts:0, timeout:true });
+        scheduleNext();
+      };
+
+      const handleAnswer = async (optIdx) => {
+        if (answeredRef.current || frozen) return;
+        clearInterval(timerRef.current);
+        setAnswered(true); answeredRef.current = true;
+        setPhase("reveal");
+        setSelected(optIdx);
+        const opt = shuffledOpts[optIdx];
+
+        if (opt.isCorrect) {
+          const base = 100;
+          const timeBonus = Math.round((timeLeft/TIME_PER_Q)*60);
+          const newStreak = streak+1;
+          const streakBonus = newStreak>=3?30:newStreak>=2?10:0;
+          let marchBonus = 0;
+
+          if (marchingRef.current) {
+            try {
+              const state = await readState();
+              const partner = state[marchingRef.current];
+              if (partner && partner.marchAnswered === qIndexRef.current) marchBonus = 25;
+            } catch(e) {}
+            await saveMyScore(scoreRef.current, false, { marchAnswered: qIndexRef.current });
+          }
+
+          const pts = base + timeBonus + streakBonus + marchBonus;
+          const newScore = scoreRef.current + pts;
+          setScore(newScore); scoreRef.current = newScore;
+          setStreak(newStreak);
+          setBestStreak(s => Math.max(s, newStreak));
+          setCorrectCount(c => c+1);
+          setFeedback({ correct:true, pts, streak:newStreak, marchBonus });
+
+          if (newStreak === 3 && !myPowerups.includes("pickpocket")) {
+            setMyPowerups(p => [...p, "pickpocket"]);
+            showToast("🤜 Pickpocket unlocked! 3-streak bonus.", "#e05c3a");
+          }
+
+          await saveMyScore(newScore, false);
+        } else {
+          setStreak(0);
+          setFeedback({ correct:false, pts:0 });
+        }
+        scheduleNext();
+      };
+
+      const scheduleNext = () => {
+        setTimeout(() => {
+          setQIndex(prev => {
+            const next = prev+1;
+            if (next >= questions.length) { endGame(); }
+            else { startQuestion(next); return next; }
+            return prev;
+          });
+        }, 2200);
+      };
+
+      const useDodger = () => {
+        if (answeredRef.current) return;
+        clearInterval(timerRef.current);
+        setAnswered(true); answeredRef.current = true;
+        setPhase("reveal");
+        setFeedback({ correct:false, pts:0, dodged:true });
+        setMyPowerups(p => p.filter(x => x !== "dodger"));
+        showToast("🏃 Draft Dodged! Question skipped, no penalty.", "#f39c12");
+        scheduleNext();
+      };
+
+      const usePowerup = (id) => {
+        const pu = POWERUPS[id];
+        if (!pu) return;
+        if (id === "dodger") { useDodger(); return; }
+        if (id === "nixon") { useNixon(); return; }
+        if (id === "teachin") {
+          setActivePowerup(id);
+          showToast("📢 Teach-In: pick your hint letter, then choose a friend.", "#4a90d9");
+          return;
+        }
+        setActivePowerup(id);
+        showToast(`${pu.icon} ${pu.label}: tap a classmate on the leaderboard!`, pu.color);
+      };
+
+      const useNixon = async () => {
+        setMyPowerups(p => p.filter(x => x !== "nixon"));
+        const state = await readState();
+        const others = Object.keys(state).filter(k => k !== nameRef.current && k !== "__events__");
+        for (const o of others) {
+          await sendEvent(o, { type:"nixon" });
+        }
+        setScrambled(true); setNixonActive(true);
+        showToast("🎭 Nixon's Dirty Tricks activated! Everyone's leaderboard is scrambled!", "#7f8c8d");
+        setTimeout(() => { setScrambled(false); setNixonActive(false); }, 15000);
+      };
+
+      const selectTarget = async (targetName) => {
+        if (!activePowerup || targetName === playerName) { setActivePowerup(null); return; }
+        const id = activePowerup;
+        const pu = POWERUPS[id];
+
+        if (id === "pickpocket") {
+          await sendEvent(targetName, { type:"pickpocket", amount:50 });
+          showToast(`🤜 Pickpocketed ${targetName}! They lose 50pts.`, "#e05c3a");
+        }
+        if (id === "block") {
+          if (score < 75) { showToast("Not enough points to block! (costs 75)", "#e05c3a"); setActivePowerup(null); return; }
+          const newScore = score - 75; setScore(newScore); scoreRef.current = newScore;
+          await saveMyScore(newScore);
+          await sendEvent(targetName, { type:"block" });
+          await writeState(cur => ({ ...cur, [targetName]: { ...(cur[targetName]||{}), frozen:true } }));
+          showToast(`🛑 ${targetName} is blocked! 75pts spent.`, "#c0392b");
+        }
+        if (id === "snitch") {
+          await sendEvent(targetName, { type:"snitch" });
+          showToast(`🕵️ Snitched on ${targetName}! Their streak is wiped.`, "#8e44ad");
+        }
+        if (id === "solidarity") {
+          await sendEvent(targetName, { type:"solidarity", amount:30 });
+          showToast(`✊ Sent 30pts to ${targetName} in solidarity!`, "#5a9e6f");
+        }
+        if (id === "teachin") {
+          if (hintToSend === null) { showToast("Pick a hint letter first!", "#4a90d9"); return; }
+          await sendEvent(targetName, { type:"hint", hint:hintToSend });
+          showToast(`📢 Hint sent to ${targetName}!`, "#4a90d9");
+          setHintToSend(null);
+        }
+        if (id === "march") {
+          await sendEvent(targetName, { type:"march" });
+          setMarching(targetName);
+          marchingRef.current = targetName;
+          showToast(`🚶 March request sent to ${targetName}!`, "#27ae60");
+        }
+
+        setMyPowerups(p => p.filter(x => x !== id));
+        setActivePowerup(null);
+      };
+
+      const acceptMarch = async () => {
+        if (!incomingMsg || incomingMsg.type !== "march") return;
+        const partner = incomingMsg.from;
+        setMarching(partner); marchingRef.current = partner;
+        await sendEvent(partner, { type:"marchAccepted" });
+        showToast(`🚶 Marching with ${partner}!`, "#27ae60");
+        setMarchPending(false); setIncomingMsg(null);
+      };
+
+      const endGame = async () => {
+        clearInterval(pollRef.current); clearInterval(timerRef.current);
+        setPhase("done");
+        await saveMyScore(scoreRef.current, true);
+        await poll();
+        setScreen("end");
+      };
+
+      useEffect(() => () => { clearInterval(timerRef.current); clearInterval(pollRef.current); }, []);
+
+      const displayLb = scrambled ? shuffle([...leaderboard]) : leaderboard;
+      const myRank = leaderboard.findIndex(p => p.name === playerName) + 1;
+
+      if (screen === "join") return <JoinScreen playerName={playerName} setPlayerName={setPlayerName} nameError={nameError} onJoin={handleJoin} leaderboard={leaderboard} />;
+      if (screen === "end") return <EndScreen score={score} correctCount={correctCount} wrongCount={questions.length - correctCount} bestStreak={bestStreak} playerName={playerName} leaderboard={leaderboard} onRetry={() => window.location.reload()} />;
+
+      return (
+        <div style={S.page}>
+          {toast && <div style={{ ...S.toast, background: toast.color }}>{toast.msg}</div>}
+          {frozen && <div style={S.frozenOverlay}><div style={S.frozenBox}>❄️ {frozenMsg}</div></div>}
+
+          {marchPending && incomingMsg?.type === "march" && (
+            <div style={S.modal}>
+              <div style={S.modalBox}>
+                <div style={S.modalTitle}>🚶 MARCH REQUEST</div>
+                <div style={S.modalBody}>{incomingMsg.from} wants to march with you!<br/>You both get +25 on co-correct answers.</div>
+                <div style={{ display:"flex", gap:10, justifyContent:"center", marginTop:14 }}>
+                  <button style={{ ...S.modalBtn, background:"#27ae60" }} onClick={acceptMarch}>JOIN THE MARCH ✊</button>
+                  <button style={{ ...S.modalBtn, background:"#666" }} onClick={() => { setMarchPending(false); setIncomingMsg(null); }}>Decline</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div style={S.gameWrap}>
+            <div style={S.hud}>
+              <div>
+                <div style={S.hudName}>{playerName}</div>
+                {streak >= 2 && <div style={S.streakBadge}>🔥 {streak}x STREAK</div>}
+                {marching && <div style={S.marchBadge}>🚶 {marching}</div>}
+              </div>
+              <div style={{ textAlign:"center" }}>
+                <div style={S.hudScore}>{score}</div>
+                <div style={S.hudScoreLbl}>POINTS</div>
+              </div>
+              <div style={{ textAlign:"right" }}>
+                <div style={S.hudQ}>Q {qIndex+1}/{questions.length}</div>
+                {myRank > 0 && <div style={S.hudRank}>RANK #{myRank}</div>}
+                {nixonActive && <div style={{ color:"#7f8c8d", fontSize:10, marginTop:2 }}>🎭 SCRAMBLED</div>}
+              </div>
+            </div>
+
+            <div style={S.timerWrap}>
+              <div style={{ ...S.timerBar, width:(timeLeft/TIME_PER_Q*100)+"%", background: timeLeft>10?"#5a9e6f":timeLeft>5?"#d4a017":"#e05c3a" }} />
+              <div style={{ ...S.timerNum, color: timeLeft>10?"#5a9e6f":timeLeft>5?"#d4a017":"#e05c3a" }}>{Math.ceil(timeLeft)}s</div>
+            </div>
+
+            {feedback && (
+              <div style={{ ...S.feedbackBanner, background: feedback.correct?"rgba(90,158,111,0.25)":"rgba(224,92,58,0.2)", borderColor: feedback.correct?"#5a9e6f":"#e05c3a" }}>
+                {feedback.dodged ? "🏃 DODGED — No penalty!" :
+                 feedback.timeout ? "⏱ TIME'S UP — No points!" :
+                 feedback.correct ? `✓ CORRECT! +${feedback.pts}pts${feedback.marchBonus?` (incl. +${feedback.marchBonus} March Bonus!)`:""} ${feedback.streak>=3?"🔥 Streak!":""}` :
+                 "✗ INCORRECT — Check the answer below"}
+              </div>
+            )}
+
+            {incomingMsg?.type === "hint" && (
+              <div style={S.hintBanner}>📢 Teach-In hint from {incomingMsg.from}: <strong>Option {LETTERS[incomingMsg.value]}</strong></div>
+            )}
+
+            {questions[qIndex] && (
+              <div style={{ ...S.questionCard, borderColor:(CAT_COLORS[questions[qIndex].category]||"#d4a017")+"66" }}>
+                <div style={{ ...S.catTag, color:CAT_COLORS[questions[qIndex].category] }}>▸ {questions[qIndex].category}</div>
+                <div style={S.questionText}>{questions[qIndex].text}</div>
+              </div>
+            )}
+
+            {activePowerup === "teachin" && (
+              <div style={S.hintSelector}>
+                <div style={S.hintSelectorLabel}>📢 Pick hint to send:</div>
+                {LETTERS.slice(0,shuffledOpts.length).map((l,i) => (
+                  <button key={i} style={{ ...S.hintBtn, background: hintToSend===i?"rgba(74,144,217,0.4)":"rgba(74,144,217,0.1)", borderColor: hintToSend===i?"#4a90d9":"rgba(74,144,217,0.3)" }} onClick={() => setHintToSend(i)}>{l}</button>
+                ))}
+                <div style={S.hintSelectorLabel}>Then tap a classmate below →</div>
+              </div>
+            )}
+
+            <div className="responsive-options-grid" style={S.optionsGrid}>
+              {shuffledOpts.map((opt,i) => {
+                let bg="rgba(255,255,255,0.04)", border="rgba(255,255,255,0.15)", color="#f0ebe0";
+                if (phase==="reveal") {
+                  if (opt.isCorrect) { bg="rgba(90,158,111,0.3)"; border="#5a9e6f"; color="#a8dbb5"; }
+                  else if (selected===i) { bg="rgba(224,92,58,0.25)"; border="#e05c3a"; color="#f4a391"; }
+                }
+                const isHint = incomingMsg?.type==="hint" && incomingMsg.value===i && phase==="question";
+                if (isHint) { border="#4a90d9"; bg="rgba(74,144,217,0.15)"; }
+                return (
+                  <button key={i} style={{ ...S.optBtn, background:bg, borderColor:border, color, cursor:answered?"default":"pointer" }} onClick={() => !answered && handleAnswer(i)} disabled={answered}>
+                    <span style={{ ...S.optLetter, color: phase==="reveal"&&opt.isCorrect?"#a8dbb5":(CAT_COLORS[questions[qIndex]?.category]||"#d4a017") }}>{LETTERS[i]}</span>
+                    {opt.text}
+                    {isHint && <span style={{ marginLeft:"auto", fontSize:11, color:"#4a90d9" }}>← hint!</span>}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={S.powerupSection}>
+              <div style={S.powerupTitle}>⚡ YOUR POWER-UPS</div>
+              <div style={S.powerupBar}>
+                {Object.values(POWERUPS).map(pu => {
+                  const have = myPowerups.includes(pu.id);
+                  const isActive = activePowerup === pu.id;
+                  return (
+                    <button key={pu.id} title={pu.label+": "+pu.desc} style={{ ...S.puBtn, opacity:have?1:0.25, cursor:have?"pointer":"not-allowed", background:isActive?pu.color+"44":"rgba(255,255,255,0.04)", borderColor:isActive?pu.color:"rgba(255,255,255,0.15)", transform:isActive?"scale(1.1)":"scale(1)" }} onClick={() => have && usePowerup(pu.id)} disabled={!have}>
+                      <span style={S.puIcon}>{pu.icon}</span>
+                      <span style={{ ...S.puLabel, color:isActive?pu.color:"rgba(240,235,224,0.6)" }}>{pu.label.split(" ")}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {activePowerup && POWERUPS[activePowerup]?.needsTarget && (
+                <div style={S.targetPrompt}>👆 Tap a classmate's name on the leaderboard to use {POWERUPS[activePowerup].icon} {POWERUPS[activePowerup].label} &nbsp;<button style={S.cancelBtn} onClick={()=>setActivePowerup(null)}>Cancel</button></div>
+              )}
+            </div>
+
+            <div style={S.lbSection}>
+              <div style={S.lbTitle}>{nixonActive?"🎭 SCRAMBLED STANDINGS":"LIVE LEADERBOARD"}</div>
+              {lbError && <div style={S.lbErr}>Leaderboard temporary restriction</div>}
+              {displayLb.slice(0,10).map((p,i) => {
+                const isMe = p.name === playerName;
+                const clickable = !!activePowerup && POWERUPS[activePowerup]?.needsTarget && !isMe;
+                return (
+                  <div key={p.name}
+                    style={{ ...S.lbRow, background:isMe?"rgba(212,160,23,0.12)":i%2===0?"rgba(255,255,255,0.025)":"transparent", borderColor:isMe?"rgba(212,160,23,0.4)":"transparent", cursor:clickable?"pointer":"default", outline:clickable?"2px dashed rgba(224,92,58,0.5)":"none" }}
+                    onClick={() => clickable && selectTarget(p.name)}
+                  >
+                    <span style={S.lbRank}>{nixonActive?"??":i===0?"🥇":i===1?"🥈":i===2?"🥉":`#${i+1}`}</span>
+                    <span style={{ ...S.lbRowName, color:isMe?"#d4a017":p.frozen?"#4a90d9":"#f0ebe0" }}>
+                      {p.name}{p.frozen?" ❄️":""}{p.marching?" 🚶":""}
+                    </span>
+                    <span style={S.lbRowScore}>{nixonActive?"???":p.score}</span>
+                    {p.done && <span style={S.doneBadge}>✓</span>}
+                    {clickable && <span style={{ fontSize:10, color:"#e05c3a", marginLeft:4 }}>← target</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function JoinScreen({ playerName, setPlayerName, nameError, onJoin, leaderboard }) {
+      return (
+        <div style={S.page}>
+          <div style={{ width:"100%", maxWidth:500, paddingTop:8 }}>
+            <div style={{ border:"3px double #d4a017", padding:"20px 24px", marginBottom:20, textAlign:"center", background:"rgba(0,0,0,0.5)" }}>
+              <div style={{ fontFamily:"sans-serif", fontSize:10, letterSpacing:5, color:"#d4a017", marginBottom:8 }}>★ CHAOS EDITION ★</div>
+              <h1 style={{ fontSize:"clamp(42px,11vw,76px)", lineHeight:1, color:"#f0ebe0", textShadow:"4px 4px 0 #c0392b", fontFamily:"'Bebas Neue','Impact',sans-serif", letterSpacing:2, margin:"4px 0" }}>RACE FOR<br/>CHANGE</h1>
+              <div style={{ fontFamily:"sans-serif", fontSize:10, letterSpacing:3, color:"#d4a017", marginTop:6 }}>USA YOUTH PROTESTS — 1960s &amp; 1970s</div>
+              <div style={{ borderTop:"1px solid rgba(212,160,23,0.4)", margin:"10px 0 8px" }} />
+              <div style={{ fontFamily:"sans-serif", fontSize:9, letterSpacing:2, color:"rgba(240,235,224,0.4)" }}>15 QUESTIONS · LIVE LEADERBOARD · STEAL · SABOTAGE · SOLIDARITY</div>
+            </div>
+            <div style={{ background:"rgba(212,160,23,0.08)", border:"1px solid rgba(212,160,23,0.3)", borderLeft:"4px solid #d4a017", padding:"14px 18px", marginBottom:20, fontSize:13, lineHeight:1.7, color:"rgba(240,235,224,0.85)", fontFamily:"'Special Elite','Courier New',monospace" }}>
+              <strong style={{ display:"block", fontFamily:"sans-serif", fontSize:10, letterSpacing:4, color:"#d4a017", marginBottom:6 }}>RULES</strong>
+              Answer 15 questions to earn points. You also get <strong>8 power-ups</strong> — steal from rivals, freeze them, snitch on their streaks, or show solidarity with friends. Every power-up can only be used once. Use them wisely!
+            </div>
+            <div style={{ marginBottom:20, textAlign:"center" }}>
+              <div style={{ fontFamily:"sans-serif", fontSize:10, letterSpacing:4, color:"#d4a017", marginBottom:10 }}>YOUR NAME</div>
+              <input style={{ background:"transparent", border:"none", borderBottom:"2px solid #f0ebe0", color:"#f0ebe0", fontFamily:"'Special Elite','Courier New',monospace", fontSize:22, padding:"8px 6px", width:"100%", maxWidth:300, textAlign:"center", outline:"none" }} value={playerName} onChange={e=>setPlayerName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&onJoin()} placeholder="Enter your name..." maxLength={20} autoFocus />
+              {nameError && <div style={{ color:"#e05c3a", fontSize:12, marginTop:8, fontFamily:"sans-serif" }}>{nameError}</div>}
+            </div>
+            <div style={{ textAlign:"center", marginBottom:24 }}>
+              <button style={{ fontFamily:"sans-serif", fontWeight:700, fontSize:18, letterSpacing:3, background:"#c0392b", color:"#f0ebe0", border:"none", padding:"15px 44px", cursor:"pointer", boxShadow:"4px 4px 0 #7b1a12" }} onClick={onJoin}>JOIN THE MOVEMENT →</button>
+            </div>
+            {leaderboard.length > 0 && (
+              <div style={{ border:"1px solid rgba(212,160,23,0.25)", padding:"14px 18px", background:"rgba(0,0,0,0.35)" }}>
+                <div style={{ fontFamily:"sans-serif", fontSize:9, letterSpacing:3, color:"#d4a017", marginBottom:10 }}>CLASSMATES ALREADY PLAYING</div>
+                {leaderboard.slice(0,6).map((p,i) => (
+                  <div key={p.name} style={{ display:"flex", alignItems:"center", gap:10, padding:"5px 0", borderBottom:"1px solid rgba(255,255,255,0.05)", fontFamily:"'Special Elite','Courier New',monospace", fontSize:14 }}>
+                    <span style={{ color:"#d4a017", width:24, fontFamily:"sans-serif", fontSize:12 }}>#{i+1}</span>
+                    <span style={{ flex:1 }}>{p.name}</span>
+                    <span style={{ fontFamily:"sans-serif", fontSize:13, color:"rgba(240,235,224,0.6)" }}>{p.score}pts</span>
+                    {p.done && <span style={S.doneBadge}>DONE</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop:16, display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center" }}>
+              {Object.values(POWERUPS).map(pu => (
+                <div key={pu.id} title={pu.desc} style={{ fontFamily:"sans-serif", fontSize:10, padding:"4px 10px", border:`1px solid ${pu.color}44`, color:pu.color, letterSpacing:1 }}>{pu.icon} {pu.label}</div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function EndScreen({ score, correctCount, wrongCount, bestStreak, playerName, leaderboard, onRetry }) {
+      const total = correctCount+wrongCount;
+      const pct = Math.round((correctCount/total)*100);
+      const myRank = leaderboard.findIndex(p=>p.name===playerName)+1;
+      const grade = pct>=87?{ label:"HISTORY MAKER", color:"#d4a017", stars:"★★★★★", msg:"Outstanding! You mastered the content AND played the power-ups well. Write that essay with confidence." }
+        :pct>=70?{ label:"COMMITTED ACTIVIST", color:"#5a9e6f", stars:"★★★★☆", msg:"Strong! Solid knowledge across all four areas. Review any missed questions — they matter for the IQ essay." }
+        :pct>=50?{ label:"RISING PROTESTER", color:"#4a90d9", stars:"★★★☆☆", msg:"You have the basics. Revisit causes and achievements — key for answering whether peace or violence brings more change." }
+        :{ label:"BACK TO BARRICADES", color:"#e05c3a", stars:"★★☆☆☆", msg:"Every activist starts somewhere. Reread the lesson slides and try again — focus on grievances and achievements." };
+      return (
+        <div style={S.page}>
+          <div style={{ width:"100%", maxWidth:520, textAlign:"center", paddingTop:8 }}>
+            <div style={{ fontFamily:"'Bebas Neue','Impact',sans-serif", fontSize:"clamp(42px,10vw,72px)", lineHeight:1, textShadow:"3px 3px 0 #c0392b", marginBottom:4 }}>{pct>=70?"EXTRA! EXTRA!":"THE FIGHT GOES ON"}</div>
+            <div style={{ fontFamily:"sans-serif", fontSize:11, letterSpacing:3, color:"#d4a017", marginBottom:18 }}>{playerName.toUpperCase()} — {grade.label}</div>
+            <div style={{ border:"3px double #d4a017", padding:"20px", marginBottom:16, background:"rgba(0,0,0,0.45)" }}>
+              <div style={{ fontFamily:"sans-serif", fontSize:10, letterSpacing:4, color:"#d4a017", marginBottom:4 }}>FINAL SCORE</div>
+              <div style={{ fontFamily:"'Bebas Neue','Impact',sans-serif", fontSize:68, lineHeight:1, color:"#f0ebe0" }}>{score}</div>
+              <div style={{ fontSize:24, letterSpacing:4, margin:"4px 0" }}>{grade.stars}</div>
+              {myRank>0&&<div style={{ fontFamily:"sans-serif", fontSize:14, letterSpacing:2, color:grade.color, marginTop:4 }}>CLASS RANK #{myRank}</div>}
+            </div>
+            <div style={{ display:"flex", justifyContent:"center", gap:24, marginBottom:16 }}>
+              {[["CORRECT",correctCount],["INCORRECT",wrongCount],["BEST STREAK",bestStreak]].map(([l,v])=>(
+                <div key={l} style={{ fontFamily:"sans-serif", textAlign:"center" }}><strong style={{ display:"block", fontFamily:"'Bebas Neue','Impact',sans-serif", fontSize:32, color:"#f0ebe0" }}>{v}</strong><span style={{ fontSize:9, letterSpacing:2, color:"rgba(240,235,224,0.5)" }}>{l}</span></div>
+              ))}
+            </div>
+            <div style={{ background:"rgba(0,0,0,0.35)", borderLeft:"4px solid #c0392b", padding:"14px 18px", textAlign:"left", fontSize:14, lineHeight:1.7, color:"rgba(240,235,224,0.85)", marginBottom:20, fontFamily:"'Special Elite','Courier New',monospace" }}>{grade.msg}</div>
+            <div style={{ border:"1px solid rgba(212,160,23,0.25)", padding:"14px 16px", background:"rgba(0,0,0,0.35)", marginBottom:20, textAlign:"left" }}>
+              <div style={{ fontFamily:"sans-serif", fontSize:9, letterSpacing:4, color:"#d4a017", marginBottom:10 }}>FINAL CLASS LEADERBOARD</div>
+              {leaderboard.slice(0,10).map((p,i)=>(
+                <div key={p.name} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 10px", borderBottom:"1px solid rgba(255,255,255,0.05)", background:p.name===playerName?"rgba(212,160,23,0.12)":"transparent", border:p.name===playerName?"1px solid rgba(212,160,23,0.4)":"1px solid transparent", marginBottom:2 }}>
+                  <span style={{ fontFamily:"sans-serif", fontSize:15, width:28, textAlign:"center" }}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":`#${i+1}`}</span>
+                  <span style={{ flex:1, fontFamily:"'Special Elite','Courier New',monospace", fontSize:15, color:p.name===playerName?"#d4a017":"#f0ebe0" }}>{p.name}</span>
+                  <span style={{ fontFamily:"sans-serif", fontWeight:700, fontSize:15, color:"rgba(240,235,224,0.7)" }}>{p.score} pts</span>
+                  {p.done&&<span style={S.doneBadge}>DONE</span>}
+                </div>
+              ))}
+            </div>
+            <div style={{ fontFamily:"sans-serif", fontSize:10, letterSpacing:3, color:"#d4a017", opacity:0.7, marginBottom:16 }}>SCREENSHOT YOUR SCORE &amp; RANK — SHARE WITH YOUR TEACHER</div>
+            <button style={{ fontFamily:"sans-serif", fontWeight:700, fontSize:16, letterSpacing:3, background:"transparent", border:"2px solid #f0ebe0", color:"#f0ebe0", padding:"12px 36px", cursor:"pointer" }} onClick={onRetry}>PLAY AGAIN</button>
+          </div>
+        </div>
+      );
+    }
+
+    const S = {
+      page: { minHeight:"100vh", background:"#131313", backgroundImage:"repeating-linear-gradient(0deg,transparent,transparent 27px,rgba(255,255,255,0.018) 27px,rgba(255,255,255,0.018) 28px)", fontFamily:"'Special Elite','Courier New',monospace", color:"#f0ebe0", padding:"12px 14px", display:"flex", justifyContent:"center", alignItems:"flex-start" },
+      toast: { position:"fixed", top:16, left:"50%", transform:"translateX(-50%)", zIndex:999, color:"#fff", fontFamily:"sans-serif", fontSize:13, fontWeight:700, letterSpacing:1, padding:"10px 22px", borderRadius:2, boxShadow:"0 4px 20px rgba(0,0,0,0.5)", maxWidth:"90vw", textAlign:"center", pointerEvents:"none" },
+      frozenOverlay: { position:"fixed", inset:0, background:"rgba(74,144,217,0.15)", zIndex:90, display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:80, pointerEvents:"none" },
+      frozenBox: { background:"rgba(74,144,217,0.9)", color:"#fff", fontFamily:"sans-serif", fontWeight:700, fontSize:16, letterSpacing:2, padding:"14px 28px" },
+      modal: { position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" },
+      modalBox: { background:"#1e1e1e", border:"2px solid #27ae60", padding:"24px", maxWidth:340, width:"90%", textAlign:"center" },
+      modalTitle: { fontFamily:"'Bebas Neue','Impact',sans-serif", fontSize:28, color:"#27ae60", marginBottom:10 },
+      modalBody: { fontFamily:"'Special Elite','Courier New',monospace", fontSize:14, lineHeight:1.6, color:"rgba(240,235,224,0.85)", marginBottom:4 },
+      modalBtn: { fontFamily:"sans-serif", fontWeight:700, fontSize:14, letterSpacing:2, border:"none", color:"#fff", padding:"10px 20px", cursor:"pointer" },
+      gameWrap: { width:"100%", maxWidth:680, paddingTop:4 },
+      hud: { display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", border:"1px solid rgba(212,160,23,0.25)", marginBottom:8, background:"rgba(0,0,0,0.4)" },
+      hudName: { fontFamily:"sans-serif", fontSize:12, letterSpacing:2, color:"#d4a017", marginBottom:2 },
+      streakBadge: { fontFamily:"sans-serif", fontSize:10, letterSpacing:1, color:"#d4a017", background:"rgba(212,160,23,0.15)", border:"1px solid rgba(212,160,23,0.4)", padding:"2px 7px", display:"inline-block" },
+      marchBadge: { fontFamily:"sans-serif", fontSize:10, color:"#27ae60", background:"rgba(39,174,96,0.15)", border:"1px solid rgba(39,174,96,0.4)", padding:"2px 7px", display:"inline-block", marginTop:2 },
+      hudScore: { fontFamily:"'Bebas Neue','Impact',sans-serif", fontSize:34, color:"#f0ebe0", lineHeight:1 },
+      hudScoreLbl: { fontFamily:"sans-serif", fontSize:9, letterSpacing:3, color:"rgba(240,235,224,0.4)" },
+      hudQ: { fontFamily:"sans-serif", fontSize:12, letterSpacing:1, color:"rgba(240,235,224,0.6)" },
+      hudRank: { fontFamily:"sans-serif", fontSize:11, letterSpacing:1, color:"#d4a017", marginTop:2 },
+      timerWrap: { height:5, background:"rgba(255,255,255,0.08)", marginBottom:8, position:"relative" },
+      timerBar: { height:"100%", transition:"width 0.1s linear, background 0.4s" },
+      timerNum: { position:"absolute", right:0, top:7, fontFamily:"sans-serif", fontWeight:700, fontSize:11 },
+      feedbackBanner: { padding:"9px 14px", marginBottom:8, fontFamily:"sans-serif", fontSize:13, letterSpacing:1, border:"1px solid", textAlign:"center" },
+      hintBanner: { padding:"8px 14px", marginBottom:8, background:"rgba(74,144,217,0.15)", border:"1px solid rgba(74,144,217,0.4)", fontFamily:"sans-serif", fontSize:13, color:"#7ec8e3", textAlign:"center" },
+      questionCard: { border:"1px solid", padding:"14px 18px", marginBottom:10, background:"rgba(0,0,0,0.45)" },
+      catTag: { fontFamily:"sans-serif", fontSize:10, letterSpacing:3, marginBottom:8, display:"block" },
+      questionText: { fontSize:"clamp(13px,2.3vw,16px)", lineHeight:1.6 },
+      hintSelector: { display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", padding:"8px 12px", background:"rgba(74,144,217,0.1)", border:"1px solid rgba(74,144,217,0.3)", marginBottom:8 },
+      hintSelectorLabel: { fontFamily:"sans-serif", fontSize:11, letterSpacing:1, color:"#4a90d9" },
+      hintBtn: { fontFamily:"sans-serif", fontWeight:700, fontSize:15, border:"1px solid", padding:"6px 14px", cursor:"pointer", color:"#f0ebe0", transition:"all 0.15s" },
+      optionsGrid: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:7, marginBottom:12 },
+      optBtn: { border:"1px solid", padding:"12px 10px", textAlign:"left", fontSize:13, lineHeight:1.4, fontFamily:"'Special Elite','Courier New',monospace", transition:"all 0.15s", display:"flex", alignItems:"flex-start", gap:7, background:"none", width:"100%" },
+      optLetter: { fontFamily:"sans-serif", fontWeight:700, fontSize:15, minWidth:18, flexShrink:0 },
+      powerupSection: { border:"1px solid rgba(212,160,23,0.2)", padding:"10px 12px", background:"rgba(0,0,0,0.3)", marginBottom:10 },
+      powerupTitle: { fontFamily:"sans-serif", fontSize:9, letterSpacing:4, color:"#d4a017", marginBottom:8 },
+      powerupBar: { display:"flex", gap:6, flexWrap:"wrap" },
+      puBtn: { border:"1px solid", padding:"7px 10px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, transition:"all 0.15s", minWidth:60 },
+      puIcon: { fontSize:18, lineHeight:1 },
+      puLabel: { fontFamily:"sans-serif", fontSize:9, letterSpacing:1 },
+      targetPrompt: { marginTop:8, fontFamily:"sans-serif", fontSize:12, color:"#e05c3a", letterSpacing:1 },
+      cancelBtn: { fontFamily:"sans-serif", fontSize:11, letterSpacing:1, background:"transparent", border:"1px solid rgba(240,235,224,0.3)", color:"rgba(240,235,224,0.7)", padding:"2px 8px", cursor:"pointer", marginLeft:8 },
+      lbSection: { border:"1px solid rgba(212,160,23,0.2)", padding:"10px 12px", background:"rgba(0,0,0,0.3)" },
+      lbTitle: { fontFamily:"sans-serif", fontSize:9, letterSpacing:4, color:"#d4a017", marginBottom:8 },
+      lbErr: { fontFamily:"sans-serif", fontSize:11, color:"#e05c3a", letterSpacing:1 },
+      lbRow: { display:"flex", alignItems:"center", gap:8, padding:"6px 8px", border:"1px solid transparent", marginBottom:2, transition:"all 0.15s" },
+      lbRank: { fontFamily:"sans-serif", fontSize:13, width:28, flexShrink:0, textAlign:"center" },
+      lbRowName: { flex:1, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" },
+      lbRowScore: { fontFamily:"sans-serif", fontWeight:700, fontSize:13, color:"rgba(240,235,224,0.7)" },
+      doneBadge: { fontFamily:"sans-serif", fontSize:9, letterSpacing:1, background:"rgba(90,158,111,0.3)", color:"#a8dbb5", border:"1px solid #5a9e6f", padding:"2px 6px" },
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
