@@ -11,7 +11,7 @@
 
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
     /* Global Reset and Canvas Setup */
@@ -78,7 +78,6 @@
       dodger:       { id:"dodger",       icon:"🏃", label:"Draft Dodger",    desc:"Skip this question, no penalty", color:"#f39c12", needsTarget:false },
     };
 
-    // Robust State Engine utilizing standard LocalStorage for fast peer-to-peer sharing
     const StorageEngine = {
       get: async (key) => {
         try {
@@ -99,7 +98,6 @@
       const [nameError, setNameError] = useState("");
       const [questions] = useState(() => shuffle(ALL_QUESTIONS));
 
-      // Game engine variables
       const [qIndex, setQIndex] = useState(0);
       const [shuffledOpts, setShuffledOpts] = useState([]);
       const [selected, setSelected] = useState(null);
@@ -112,7 +110,6 @@
       const [feedback, setFeedback] = useState(null);
       const [phase, setPhase] = useState("question");
 
-      // Power-ups and modifiers
       const [myPowerups, setMyPowerups] = useState([]);
       const [activePowerup, setActivePowerup] = useState(null);
       const [hintToSend, setHintToSend] = useState(null);
